@@ -3,6 +3,13 @@
 #include <QProcess>
 #include <QFile>
 #include <QTextStream>
+#include <QDir>
+
+
+/*static inline QString host(const QHttpServerRequest &request)
+{
+    return QString::fromLatin1(request.value("Host"));
+}*/
 
 int main(int argc, char *argv[])
 {
@@ -14,8 +21,11 @@ int main(int argc, char *argv[])
     });
 
     //Busca json do ativo no banco e retorna
-    httpServer.route("/ativo/", [] (const QString nomeAtivo) {
-        QString scriptFile = QCoreApplication::applicationDirPath() + "../../pythonCode/retrieve.py";
+    //(QString nomeAtivo, const QHttpServerRequest &request)
+    httpServer.route("/ativo/", [] (QString nomeAtivo) {
+
+       QDir::setCurrent("C:/up2data_api");
+       QString scriptFile = QDir().currentPath() + "/pythonCode/retrieve.py";
 
         QFile pyFile(scriptFile);
 
@@ -24,16 +34,16 @@ int main(int argc, char *argv[])
             QTextStream fileContent(&pyFile);
 
 
-            QString pyCode = "import pymongo";
-            pyCode += "client = pymongo.MongoClient('latour.mboituva.app.br:3000')";
+            QString pyCode = "import pymongo\n";
+            pyCode += "client = pymongo.MongoClient('latour.mboituva.app.br:3000')\n";
 
-            pyCode += "mydb=client['WorldSecurity']";
-            pyCode += "information = mydb.SecurityHistorical";
+            pyCode += "mydb=client['WorldSecurity']\n";
+            pyCode += "information = mydb.SecurityHistorical\n";
 
-            pyCode += "col = mydb[\"SecurityHistorical\"]";
+            pyCode += "col = mydb[\"SecurityHistorical\"]\n";
 
-            pyCode += "jsonAtv = col.find_one({'TckrSymb': {'$exists': True}}, {'TckrSymb':" + nomeAtivo.toUpper() + "})";
-            pyCode += "print(jsonAtv)";
+            pyCode += "jsonAtv = col.find_one({'TckrSymb': {'$exists': True}}, {'TckrSymb': '" + nomeAtivo.toUpper() + "'})\n";
+            pyCode += "print(jsonAtv)\n";
 
             //Coloca o conteúdo dentro do arquivo
             fileContent << pyCode;
@@ -47,25 +57,39 @@ int main(int argc, char *argv[])
         }
 
 
-        QStringList comandosPython = QStringList() << "python.exe" << scriptFile;
+        QStringList comandosPython = QStringList() << scriptFile;
 
         QProcess process;
-        process.start ("python", comandosPython);
+        process.start ("C:/Python39/python.exe", comandosPython);
+
+        process.waitForFinished();
+
+        QJsonArray jsonParsed;
 
         if(!process.error())
         {
             QString json = process.readAllStandardOutput();
-            qDebug() << json;
+
+            QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+
+            if(!doc.isNull())
+            {
+                if(doc.isArray())
+                {
+                    jsonParsed = doc.array();
+                }
+            }
+
         }
         else
         {
             QString erro = process.readAllStandardError();
             qDebug() << erro;
+            //return QString(erro);
         }
 
-           //return QString("User %1").arg(id);
-        process.waitForFinished();
-
+        return QJsonArray(jsonParsed);
+        //return QString("Ok it seems MOTHERSHOKER");
        });
 
 
